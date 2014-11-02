@@ -36,9 +36,9 @@ int main(int argc, char ** argv)
     float log2 = log2_series(data_size);
     double end_time = getclock();
     
-    printf("CPU result: %f\n", log2);
-    printf(" log(2)=%f\n", log(2.0));
-    printf(" time=%fs\n", end_time - start_time);
+//    printf("CPU result: %f\n", log2);
+//    printf(" log(2)=%f\n", log(2.0));
+//    printf(" time=%fs\n", end_time - start_time);
     
     // Parameter definition
     int threads_per_block = 4 * 32;
@@ -115,9 +115,9 @@ int main(int argc, char ** argv)
 
     // TODO
     
-    printf("GPU results:\n");
-    printf(" Sum1: %f\n", sum);
-    printf(" Sum2: %f\n", sum_2);
+//    printf("GPU results:\n");
+//    printf(" Sum1: %f\n", sum);
+//    printf(" Sum2: %f\n", sum_2);
     
     float elapsedTime;
     CUDA_SAFE_CALL(cudaEventElapsedTime(&elapsedTime, start, stop));	// In ms
@@ -126,21 +126,27 @@ int main(int argc, char ** argv)
     float time_per_iter = total_time / (float)data_size;
     float bandwidth = sizeof(float) / time_per_iter; // B/s
     
-    printf(" Total time 1: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
-    	total_time,
-    	time_per_iter * 1.e9,
-    	bandwidth / 1.e9);
+//    printf(" Total time 1: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
+//    	total_time,
+//    	time_per_iter * 1.e9,
+//    	bandwidth / 1.e9);
 
-    CUDA_SAFE_CALL(cudaEventElapsedTime(&elapsedTime, start_2, stop_2));	// In ms
 
-    total_time = elapsedTime / 1000.;	// s
-    time_per_iter = total_time / (float)data_size;
-    bandwidth = sizeof(float) / time_per_iter; // B/s
+    float elapsedTime2;
+    CUDA_SAFE_CALL(cudaEventElapsedTime(&elapsedTime2, start_2, stop_2));	// In ms
+
+    float total_time2 = elapsedTime2 / 1000.;	// s
+    float time_per_iter2 = total_time2 / (float)data_size;
+    float bandwidth2 = sizeof(float) / time_per_iter2; // B/s
     
-    printf(" Total time 2: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
-    	total_time,
-    	time_per_iter * 1.e9,
-    	bandwidth / 1.e9);
+//    printf(" Total time 2: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
+//    	total_time2,
+//    	time_per_iter2 * 1.e9,
+//    	bandwidth2 / 1.e9);
+
+    printf("cpu_res,k1_res,k2_res,cpu_time,k1_time,k2_time,k1_pi,k2_pi,k1_thr,k2_thr\n");
+    printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",log2,sum,sum_2,end_time-start_time,total_time,total_time2, time_per_iter*1.e9, time_per_iter2*1.e9, bandwidth/1.e9, bandwidth2/1.e9);
+
   
 
     CUDA_SAFE_CALL(cudaEventDestroy(start_2));
