@@ -48,14 +48,6 @@ __global__ void summation_kernel_per_block(int data_size, results * data_out)
 	sum_threads[threadIdx.x] = result;
 
 	__syncthreads();
-/*  	if(threadIdx.x == 0){
-        	float sum_block = 0.0;
-	        for(int i=0;i<blockDim.x;i++){
-        	    sum_block += sum_threads[i];
-	        }
-        	data_out[blockIdx.x].sum = sum_block;    
-    	}*/
-    
 	
         for (int i = 1 ; i<blockDim.x ; i = i << 1 ) {
                 if (threadIdx.x%(i << 1) == 0) {
@@ -64,6 +56,6 @@ __global__ void summation_kernel_per_block(int data_size, results * data_out)
 		__syncthreads();
         }
 
-	//data_out[blockIdx.x].sum = sum_threads[0];
+	data_out[blockIdx.x].sum = sum_threads[0];
 
 }
