@@ -1,6 +1,6 @@
 
 // GPU kernel
-__global__ void summation_kernel(int data_size, results * data_out)
+__global__ void summation_kernel_commom(int data_size, results * data_out)
 {
 	int num_threads = gridDim.x * blockDim.x;
 	int thread_data_size = data_size / num_threads;
@@ -11,10 +11,11 @@ __global__ void summation_kernel(int data_size, results * data_out)
                 result = result + (float)((((i%2)-1)+(i%2)))*-1. / (float)(i+1);
         }
 	data_out[thread_absolute_id].sum = result;
+
 }
 
 
-__global__ void summation_kernel_2(int data_size, results * data_out)
+__global__ void summation_kernel_interleaved(int data_size, results * data_out)
 {
 
 	int num_threads = gridDim.x * blockDim.x;
@@ -29,4 +30,40 @@ __global__ void summation_kernel_2(int data_size, results * data_out)
                 result = result + (float)((((i%2)-1)+(i%2)))*-1. / (float)(i+1);
         }
 	data_out[thread_absolute_id].sum = result;
+}
+
+
+__global__ void summation_kernel_per_block(int data_size, results * data_out)
+{
+	extern __shared__ float sum_threads[];
+
+	int num_threads = gridDim.x * blockDim.x;
+	int thread_data_size = data_size / num_threads;
+	int thread_absolute_id = blockIdx.x * blockDim.x + threadIdx.x;
+
+        float result = 0;
+        for (int i = thread_absolute_id*thread_data_size; i<thread_absolute_id*thread_data_size+thread_data_size; i++) {
+                result = result + (float)((((i%2)-1)+(i%2)))*-1. / (float)(i+1);
+        }
+	sum_threads[threadIdx.x] = result;
+
+	__syncthreads();
+/*  	if(threadIdx.x == 0){
+        	float sum_block = 0.0;
+	        for(int i=0;i<blockDim.x;i++){
+        	    sum_block += sum_threads[i];
+	        }
+        	data_out[blockIdx.x].sum = sum_block;    
+    	}*/
+    
+	
+        for (int i = 1 ; i<blockDim.x ; i = i << 1 ) {
+                if (threadIdx.x%(i << 1) == 0) {
+                        sum_threads[threadIdx.x] += sum_threads[threadIdx.x+i];
+                }
+		__syncthreads();
+        }
+
+	//data_out[blockIdx.x].sum = sum_threads[0];
+
 }

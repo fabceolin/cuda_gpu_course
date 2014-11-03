@@ -36,9 +36,9 @@ int main(int argc, char ** argv)
     float log2 = log2_series(data_size);
     double end_time = getclock();
     
-//    printf("CPU result: %f\n", log2);
-//    printf(" log(2)=%f\n", log(2.0));
-//    printf(" time=%fs\n", end_time - start_time);
+    printf("CPU result: %f\n", log2);
+    printf(" log(2)=%f\n", log(2.0));
+    printf(" time=%fs\n", end_time - start_time);
     
     // Parameter definition
     int threads_per_block = 4 * 32;
@@ -55,11 +55,10 @@ int main(int argc, char ** argv)
     CUDA_SAFE_CALL(cudaEventCreate(&start));
     CUDA_SAFE_CALL(cudaEventCreate(&stop));
 
-    int results_size = num_threads;
+    int results_size = blocks_in_grid;
     results * data_out_cpu;
     // Allocating output data on CPU
     data_out_cpu = (results *) malloc(results_size*sizeof(results));
-
 
     // Allocating output data on GPU
     results *data_out_gpu;
@@ -69,7 +68,7 @@ int main(int argc, char ** argv)
     CUDA_SAFE_CALL(cudaEventRecord(start, 0));
 
     // Execute kernel
-    summation_kernel<<<blocks_in_grid,threads_per_block>>>(data_size,data_out_gpu);
+    summation_kernel_per_block<<<blocks_in_grid,threads_per_block,threads_per_block*sizeof(float)>>>(data_size,data_out_gpu);
 
     // Stop timer
     CUDA_SAFE_CALL(cudaEventRecord(stop, 0));
@@ -83,31 +82,6 @@ int main(int argc, char ** argv)
     for (int i = 0; i<results_size; i++) {
 	sum+=data_out_cpu[i].sum;
     } 
-
-    // Timer initialization
-    cudaEvent_t start_2, stop_2;
-    CUDA_SAFE_CALL(cudaEventCreate(&start_2));
-    CUDA_SAFE_CALL(cudaEventCreate(&stop_2));
-
-    // Start timer
-    CUDA_SAFE_CALL(cudaEventRecord(start_2, 0));
-
-    // Execute kernel
-
-    summation_kernel_2<<<blocks_in_grid,threads_per_block>>>(data_size,data_out_gpu);
-
-    // Stop timer
-    CUDA_SAFE_CALL(cudaEventRecord(stop_2, 0));
-    CUDA_SAFE_CALL(cudaEventSynchronize(stop_2));
-
-    // Get results back
-    cudaMemcpy(data_out_cpu,data_out_gpu,results_size*sizeof(results),cudaMemcpyDeviceToHost);
-    
-    // Finish reduction
-    float sum_2 = 0.;
-    for (int i = 0; i<results_size; i++) {
-	sum_2+=data_out_cpu[i].sum;
-    } 
     
     // Cleanup
     cudaFree(data_out_gpu);
@@ -115,9 +89,8 @@ int main(int argc, char ** argv)
 
     // TODO
     
-//    printf("GPU results:\n");
-//    printf(" Sum1: %f\n", sum);
-//    printf(" Sum2: %f\n", sum_2);
+    printf("GPU results:\n");
+    printf(" Sum1: %f\n", sum);
     
     float elapsedTime;
     CUDA_SAFE_CALL(cudaEventElapsedTime(&elapsedTime, start, stop));	// In ms
@@ -126,31 +99,11 @@ int main(int argc, char ** argv)
     float time_per_iter = total_time / (float)data_size;
     float bandwidth = sizeof(float) / time_per_iter; // B/s
     
-//    printf(" Total time 1: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
-//    	total_time,
-//    	time_per_iter * 1.e9,
-//    	bandwidth / 1.e9);
+    printf(" Total time 1: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
+    	total_time,
+    	time_per_iter * 1.e9,
+    	bandwidth / 1.e9);
 
-
-    float elapsedTime2;
-    CUDA_SAFE_CALL(cudaEventElapsedTime(&elapsedTime2, start_2, stop_2));	// In ms
-
-    float total_time2 = elapsedTime2 / 1000.;	// s
-    float time_per_iter2 = total_time2 / (float)data_size;
-    float bandwidth2 = sizeof(float) / time_per_iter2; // B/s
-    
-//    printf(" Total time 2: %g s,\n Per iteration: %g ns\n Throughput: %g GB/s\n",
-//    	total_time2,
-//    	time_per_iter2 * 1.e9,
-//    	bandwidth2 / 1.e9);
-
-    printf("cpu_res,k1_res,k2_res,cpu_time,k1_time,k2_time,k1_pi,k2_pi,k1_thr,k2_thr\n");
-    printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",log2,sum,sum_2,end_time-start_time,total_time,total_time2, time_per_iter*1.e9, time_per_iter2*1.e9, bandwidth/1.e9, bandwidth2/1.e9);
-
-  
-
-    CUDA_SAFE_CALL(cudaEventDestroy(start_2));
-    CUDA_SAFE_CALL(cudaEventDestroy(stop_2));
     return 0;
 }
 
