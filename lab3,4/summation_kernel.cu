@@ -59,3 +59,17 @@ __global__ void summation_kernel_per_block(int data_size, results * data_out)
 	data_out[blockIdx.x].sum = sum_threads[0];
 
 }
+
+__global__ void parallel_reduce(int n, results* data){    
+
+    extern __shared__ float sum[];
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	
+    for (int i = 1 ; i < n ; i = i << 1 ) {
+	    if (tid%(i << 1) == 0) {
+		    data[tid].sum += data[tid+i].sum;
+	    }
+	    __syncthreads();
+    }
+}
