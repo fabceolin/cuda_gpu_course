@@ -9,8 +9,19 @@ __global__ void init_kernel(int * domain, int pitch, int block_y_step)
     int tx = threadIdx.x % blockXThreadSize ;
     int ty = (blockIdx.y * blockYThreadSize) + (int)(threadIdx.x / blockXThreadSize);
 
+    int value = tx % 3;
+    switch (value) {
+        case(0):
+            domain[ tx + ty * blockXThreadSize] = 1;
+            break;
+        case(1):
+            domain[ tx + ty * blockXThreadSize] = 0;
+            break;
+        case(2):
+            domain[ tx + ty * blockXThreadSize] = 2;
+            break;
+    }
 
-    domain[ tx + ty * blockXThreadSize] = ( tx + ty * blockXThreadSize) % 3;
 }
 
 // Reads a cell at (x+dx, y+dy)
