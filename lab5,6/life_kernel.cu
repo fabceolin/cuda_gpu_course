@@ -23,48 +23,63 @@ __device__ void write_cell(int * dest_domain, int x, int y, int dx, int dy,
 }
 
 // Compute kernel
-__global__ void life_kernel(int * source_domain, int * dest_domain,
-    int domain_x, int domain_y, int pitch)
+__global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x, int domain_y, int pitch, int block_y_step)
 {
-    int tx = blockIdx.x * blockDim.x + threadIdx.x;
-    int ty = blockIdx.y;
-    
-    // Read cell
-    int myself = read_cell(source_domain, tx, ty, 0, 0,
+    extern __shared__ int shared_data[];
+
+    int tx = blockIdx.x * blockDim.x + threadIdx.x % blockDim.x ;
+    int ty = blockIdx.y * block_y_step + (int)(threadIdx.x / blockDim.x);  // Conta com o stem;
+
+    // load shared;
+    shared_data[tx * (1+ty) ] = read_cell(source_domain, tx, ty, 0, 0,
                        domain_x, domain_y, pitch);
-    
-    
-    // TODO: Read the 8 neighbors and count number of blue and red 
+
+    if (threadIdx.y == 0 ) {
+        shared_data[tx * (ty)] = read_cell(source_domain, tx, ty, 0, -1,
+                       domain_x, domain_y, pitch);
+    }
+
+    if (threadIdx.y == 3 ) {
+        shared_data[tx * (ty+block_y_step)] = read_cell(source_domain, tx, ty, 0, 1,
+                       domain_x, domain_y, pitch);
+    }
+
+    __syncthreads();
+
+    // Read cell
+    int myself = shared_data[tx * ty];
+
+
+    // TODO: Read the 8 neighbors and count number of blue and red
     int blue=0;
     int red=0;
     int adjacent_count=0;
     for (int i=0; i<9;i++) {
         if (i==4) /* itself */ {
-           continue;
+            continue;
         }
         int x = i % 3 - 1;
         int y = (int) (i / 3) - 1;
-        int near = read_cell(source_domain, tx, ty, x,y,domain_x,domain_y,pitch);
+        int near = shared_data[(x+tx)*(y+ty)];
         switch (near) {
             case (1):
-                 red++;
-                 break;
+                red++;
+                break;
             case (2):
-                 blue++;
-                 break;
-        default:
-           break;
+                blue++;
+                break;
+            default:
+                break;
         }
         if ( (i+1)%2==0) {
-           if (near>0) {
-               adjacent_count++; 
-           }
+            if (near>0) {
+                adjacent_count++;
+            }
         }
     }
 
     int total_near = blue+red;
     int new_value = myself;
-    
     // rules
     if ((total_near)>3) {
         new_value = 0;
@@ -81,10 +96,9 @@ __global__ void life_kernel(int * source_domain, int * dest_domain,
              new_value=1;
          }
     }
-    
 
     write_cell(dest_domain, tx, ty, 0,0,domain_x,domain_y,pitch,new_value);
     return;
-    
+
 }
 
