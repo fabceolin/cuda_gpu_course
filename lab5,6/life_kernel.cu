@@ -1,8 +1,16 @@
 
-__global__ void init_kernel(int * domain, int pitch)
+__global__ void init_kernel(int * domain, int pitch, int block_y_step)
 {
-    domain[blockIdx.y * pitch / sizeof(int) + blockIdx.x * blockDim.x + threadIdx.x]
-        = (1664525ul * (blockIdx.x + threadIdx.y + threadIdx.x) + 1013904223ul) % 3;
+                          /* 512 / 4 */
+
+    int blockXThreadSize = blockDim.x / block_y_step;
+    int blockYThreadSize = blockDim.x / block_y_step / gridDim.y;
+
+    int tx = threadIdx.x % blockXThreadSize ;
+    int ty = (blockIdx.y * blockYThreadSize) + (int)(threadIdx.x / blockXThreadSize);
+
+
+    domain[ tx + ty * blockXThreadSize] = ( tx + ty * blockXThreadSize) % 3;
 }
 
 // Reads a cell at (x+dx, y+dy)
@@ -27,27 +35,70 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 {
     extern __shared__ int shared_data[];
 
-    int tx = blockIdx.x * blockDim.x + threadIdx.x % blockDim.x ;
-    int ty = blockIdx.y * block_y_step + (int)(threadIdx.x / blockDim.x);  // Conta com o stem;
+    int blockXThreadSize = blockDim.x / block_y_step;
+    int blockYThreadSize = blockDim.x / block_y_step / gridDim.y;
+
+    int tx = threadIdx.x % blockXThreadSize ;
+             /* 0-511 */
+            /*       0-127           */
+
+/*  
+    global memory 
+    X  --------->                                                                                                                 Y
+  00210210210210210210210210210210210210210210210210210210210210210210210210210020100210211002210210210210210210020100020002210210 |
+  01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001 |
+  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001 V
+  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+
+   */
+             /* 0-31  */
+             /*      0-124 step 4      +         0 - 3             */
+            /*                      0-127                          */
+    int ty = blockIdx.y * blockYThreadSize + (int)(threadIdx.x / blockXThreadSize);
+
+    /* 0 -127 */
+    int shared_tx = tx;
+
+    /* 1 - 4 */
+    int shared_ty = (ty % blockYThreadSize) + 1;
 
     // load shared;
-    shared_data[tx * (1+ty) ] = read_cell(source_domain, tx, ty, 0, 0,
+    /*
+ 
+                                                                                                                                   127
+   0                                                                                                                              /
+       // Shared memory                                                                                                           |
+0  00210210210210210210210210210210210210210210210210210210210210210210210210210020100210211002210210210210210210020100020002210210
+
+   X(shared_x=0, shared_y= 1)  --------->                                                                                         Y
+1  00210210210210210210210210210210210210210210210210210210210210210210210210210020100210211002210210210210210210020100020002210210 |
+2  01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001 |
+3  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001 V
+4  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+
+5  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+       */
+                /* 0-127  +   (1-4)*128       */
+    shared_data[shared_tx + (shared_ty)*blockXThreadSize ] = read_cell(source_domain, tx, ty, 0, 0,
                        domain_x, domain_y, pitch);
 
-    if (threadIdx.y == 0 ) {
-        shared_data[tx * (ty)] = read_cell(source_domain, tx, ty, 0, -1,
+    if (shared_ty == 1 ) {
+                   /* 0-127   +   0 */
+        shared_data[shared_tx + (shared_ty-1)*blockXThreadSize ] = read_cell(source_domain, tx, ty, 0, -1,
                        domain_x, domain_y, pitch);
     }
 
-    if (threadIdx.y == 3 ) {
-        shared_data[tx * (ty+block_y_step)] = read_cell(source_domain, tx, ty, 0, 1,
+    if (shared_ty == 4 ) {
+                   /* 0-127   +  5*blockDim.x  */
+        shared_data[shared_tx + (shared_ty+1)*blockXThreadSize ] = read_cell(source_domain, tx, ty, 0, 1,
                        domain_x, domain_y, pitch);
     }
 
     __syncthreads();
 
     // Read cell
-    int myself = shared_data[tx * ty];
+//    int myself=0;
+    int myself = shared_data[shared_tx + (shared_ty)*blockXThreadSize];
 
 
     // TODO: Read the 8 neighbors and count number of blue and red
@@ -60,7 +111,14 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
         }
         int x = i % 3 - 1;
         int y = (int) (i / 3) - 1;
-        int near = shared_data[(x+tx)*(y+ty)];
+  //      int near=0;
+        // Modulus of negative is negative, so I will sum 2 to the value to never be negative
+        if ((x+shared_tx<0)) {
+            x=0;
+            shared_tx=blockXThreadSize-1;
+        }
+
+        int near = shared_data[(((x+shared_tx)%blockXThreadSize) + ((shared_ty+y)*blockXThreadSize))];
         switch (near) {
             case (1):
                 red++;

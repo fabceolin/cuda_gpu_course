@@ -36,7 +36,7 @@ int main(int argc, char ** argv)
                 domain_y));
 
     // Arrays of dimensions pitch * domain.y
-    init_kernel<<< grid, threads, 0 >>>(domain_gpu[0], pitch);
+    init_kernel<<< grid, threads, 0 >>>(domain_gpu[0], pitch,blocks_y_step);
 
     // Timer initialization
     cudaEvent_t start, stop;
@@ -50,7 +50,7 @@ int main(int argc, char ** argv)
     int shared_mem_size = domain_x * (blocks_y_step+2) * sizeof(int) ;
     printf("%d %d %d \n",blocks_x, blocks_y, shared_mem_size);
     for(int i = 0; i < steps; i++) {
-        life_kernel<<< grid, threads, shared_mem_size >>>(domain_gpu[i%2], domain_gpu[(i+1)%2], domain_x, domain_y, pitch, blocks_y_step);
+       life_kernel<<< grid, threads, shared_mem_size >>>(domain_gpu[i%2], domain_gpu[(i+1)%2], domain_x, domain_y, pitch, blocks_y_step);
     }
 
     // Stop timer
