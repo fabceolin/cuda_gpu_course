@@ -12,17 +12,17 @@ int main(int argc, char ** argv)
     int domain_y = 128;
 
     int cells_per_word = 1;
-
     int steps = 2;
 
-
     int blocks_y_step = 4;
-    int threads_per_block = 128 * blocks_y_step;
-    int blocks_x = blocks_y_step * domain_x / (threads_per_block * cells_per_word);
     int blocks_y = domain_y / blocks_y_step;
+    int blocks_x = 1;
+    
+    int threads_x = domain_x;
+    int threads_y = blocks_y_step;
 
     dim3  grid(blocks_x  , blocks_y );// CUDA grid dimensions
-    dim3  threads(threads_per_block);// CUDA block dimensions
+    dim3  threads(threads_x, threads_y);// CUDA block dimensions
 
     // Allocation of arrays
     int * domain_gpu[2] = {NULL, NULL};
@@ -50,7 +50,7 @@ int main(int argc, char ** argv)
     int shared_mem_size = domain_x * (blocks_y_step+2) * sizeof(int) ;
     printf("%d %d %d \n",blocks_x, blocks_y, shared_mem_size);
     for(int i = 0; i < steps; i++) {
-       life_kernel<<< grid, threads, shared_mem_size >>>(domain_gpu[i%2], domain_gpu[(i+1)%2], domain_x, domain_y, pitch, blocks_y_step);
+       life_kernel<<< grid, threads, shared_mem_size >>>(domain_gpu[i%2], domain_gpu[(i+1)%2], domain_x, domain_y, pitch);
     }
 
     // Stop timer

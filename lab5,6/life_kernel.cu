@@ -6,19 +6,19 @@ __global__ void init_kernel(int * domain, int pitch, int block_y_step)
     int blockXThreadSize = blockDim.x / block_y_step;
     int blockYThreadSize = blockDim.x / block_y_step / gridDim.y;
 
-    int tx = threadIdx.x % blockXThreadSize ;
-    int ty = (blockIdx.y * blockYThreadSize) + (int)(threadIdx.x / blockXThreadSize);
+    int tx = threadIdx.x % blockDim.x;
+    int ty = (blockIdx.y * blockDim.y) + threadIdx.y;
 
     int value = tx % 3;
     switch (value) {
         case(0):
-            domain[ tx + ty * blockXThreadSize] = 1;
+            domain[ tx + ty * blockDim.x] = 1;
             break;
         case(1):
-            domain[ tx + ty * blockXThreadSize] = 0;
+            domain[ tx + ty * blockDim.x] = 0;
             break;
         case(2):
-            domain[ tx + ty * blockXThreadSize] = 2;
+            domain[ tx + ty * blockDim.x] = 2;
             break;
     }
 
@@ -28,28 +28,25 @@ __global__ void init_kernel(int * domain, int pitch, int block_y_step)
 __device__ int read_cell(int * source_domain, int x, int y, int dx, int dy,
     int domain_x, int domain_y, int pitch)
 {
-    x = (x + dx) % domain_x;	// Wrap around
-    y = (y + dy) % domain_y;
+    x = (x + dx + domain_x ) % domain_x;	// Wrap around
+    y = (y + dy + domain_y ) % domain_y;
     return source_domain[y * (pitch / sizeof(int)) + x];
 }
 
 __device__ void write_cell(int * dest_domain, int x, int y, int dx, int dy,
     int domain_x, int domain_y, int pitch, int value)
 {
-    x = (x + dx) % domain_x;	// Wrap around
-    y = (y + dy) % domain_y;
+    x = (x + dx + domain_x ) % domain_x;	// Wrap around
+    y = (y + dy + domain_y ) % domain_y;
     dest_domain[y * (pitch / sizeof(int)) + x] = value;
 }
 
 // Compute kernel
-__global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x, int domain_y, int pitch, int block_y_step)
+__global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x, int domain_y, int pitch)
 {
     extern __shared__ int shared_data[];
 
-    int blockXThreadSize = blockDim.x / block_y_step;
-    int blockYThreadSize = blockDim.x / block_y_step / gridDim.y;
-
-    int tx = threadIdx.x % blockXThreadSize ;
+    int tx = threadIdx.x ;
              /* 0-511 */
             /*       0-127           */
 
@@ -65,13 +62,13 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
              /* 0-31  */
              /*      0-124 step 4      +         0 - 3             */
             /*                      0-127                          */
-    int ty = blockIdx.y * blockYThreadSize + (int)(threadIdx.x / blockXThreadSize);
+    int ty = blockIdx.y * blockDim.y + (threadIdx.y);
 
     /* 0 -127 */
     int shared_tx = tx;
 
     /* 1 - 4 */
-    int shared_ty = (ty % blockYThreadSize) + 1;
+    int shared_ty = ty % blockDim.y + 1;
 
     // load shared;
     /*
@@ -90,26 +87,32 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 5  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
        */
                 /* 0-127  +   (1-4)*128       */
-    shared_data[shared_tx + (shared_ty)*blockXThreadSize ] = read_cell(source_domain, tx, ty, 0, 0,
-                       domain_x, domain_y, pitch);
+    shared_data[shared_tx + (shared_ty)*blockDim.x ] =  read_cell(source_domain, tx, ty, 0, 0, domain_x, domain_y, pitch);
 
-    if (shared_ty == 1 ) {
+    if (shared_ty == 1) {
                    /* 0-127   +   0 */
-        shared_data[shared_tx + (shared_ty-1)*blockXThreadSize ] = read_cell(source_domain, tx, ty, 0, -1,
-                       domain_x, domain_y, pitch);
+        shared_data[shared_tx + (shared_ty-1)*blockDim.x ] = read_cell(source_domain, tx, ty, 0, -1, domain_x, domain_y, pitch);
     }
 
-    if (shared_ty == 4 ) {
+    if (shared_ty == 4) {
                    /* 0-127   +  5*blockDim.x  */
-        shared_data[shared_tx + (shared_ty+1)*blockXThreadSize ] = read_cell(source_domain, tx, ty, 0, 1,
+        shared_data[shared_tx + (shared_ty+1)*blockDim.x ] = read_cell(source_domain, tx, ty, 0, 1,
                        domain_x, domain_y, pitch);
     }
 
-    __syncthreads();
+#if 0
+    if ( (threadIdx.x == 0) && (threadIdx.y==0) && (blockIdx.y==0 )) {
+        int i;
+        for (i=0;i<768;i++) {
+            write_cell(dest_domain, i%blockDim.x, i/blockDim.x, 0,0,domain_x,domain_y,pitch,(shared_data[i]+1)%10);
+        }
+    }
+    return;
+#endif
 
     // Read cell
 //    int myself=0;
-    int myself = shared_data[shared_tx + (shared_ty)*blockXThreadSize];
+    int myself = shared_data[shared_tx + (shared_ty)*blockDim.x];
 
 
     // TODO: Read the 8 neighbors and count number of blue and red
@@ -122,14 +125,8 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
         }
         int x = i % 3 - 1;
         int y = (int) (i / 3) - 1;
-  //      int near=0;
-        // Modulus of negative is negative, so I will sum 2 to the value to never be negative
-        if ((x+shared_tx<0)) {
-            x=0;
-            shared_tx=blockXThreadSize-1;
-        }
-
-        int near = shared_data[(((x+shared_tx)%blockXThreadSize) + ((shared_ty+y)*blockXThreadSize))];
+        // In C, mod of negative is negative
+        int near = shared_data[(((x+shared_tx+blockDim.x)%blockDim.x) + ((shared_ty+y)*blockDim.x))];
         switch (near) {
             case (1):
                 red++;
@@ -168,6 +165,5 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 
     write_cell(dest_domain, tx, ty, 0,0,domain_x,domain_y,pitch,new_value);
     return;
-
 }
 
