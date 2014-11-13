@@ -101,6 +101,7 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
     return;
 #endif
 
+    __syncthreads();
     // Read cell
     int myself = shared_data[shared_tx + (shared_ty)*blockDim.x];
 
@@ -126,10 +127,7 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
             default:
                 break;
         }
-        if ( (i+1)%2==0) {
-            if (near>0) {
-                adjacent_count++;
-            }
+        adjancent_count = adjacent_count + (!((i+1)%2) && near);
         }
     }
 
@@ -143,13 +141,9 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
     if (adjacent_count==1) {
         new_value = 0;
     }
+
     if ((total_near)==3 && (myself==0)) {
-         if (blue>red) {
-             new_value=2;
-         }
-         else {
-             new_value=1;
-         }
+        new_value = 1 << ((blue & 0x02) >> 1);
     }
 
     write_cell(dest_domain, tx, ty, 0,0,domain_x,domain_y,pitch,new_value);
