@@ -47,7 +47,7 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
     extern __shared__ int shared_data[];
 
     int tx = threadIdx.x ;
-             /* 0-511 */
+            /* 0-511 */
             /*       0-127           */
 
 /*  
@@ -127,8 +127,7 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
             default:
                 break;
         }
-        adjancent_count = adjacent_count + (!((i+1)%2) && near);
-        }
+        adjacent_count = adjacent_count + (!((i+1)%2) && near);
     }
 
     int total_near = blue+red;
