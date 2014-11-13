@@ -9,16 +9,16 @@ __global__ void init_kernel(int * domain, int pitch)
 __device__ int read_cell(int * source_domain, int x, int y, int dx, int dy,
     int domain_x, int domain_y, int pitch)
 {
-    x = (x + dx) % domain_x;	// Wrap around
-    y = (y + dy) % domain_y;
+    x = (x + dx + domain_x) % domain_x;	// Wrap around
+    y = (y + dy + domain_y) % domain_y;
     return source_domain[y * (pitch / sizeof(int)) + x];
 }
 
 __device__ void write_cell(int * dest_domain, int x, int y, int dx, int dy,
     int domain_x, int domain_y, int pitch, int value)
 {
-    x = (x + dx) % domain_x;	// Wrap around
-    y = (y + dy) % domain_y;
+    x = (x + dx + domain_x) % domain_x;	// Wrap around
+    y = (y + dy + domain_y) % domain_y;
     dest_domain[y * (pitch / sizeof(int)) + x] = value;
 }
 
