@@ -3,9 +3,6 @@ __global__ void init_kernel(int * domain, int pitch, int block_y_step)
 {
                           /* 512 / 4 */
 
-    int blockXThreadSize = blockDim.x / block_y_step;
-    int blockYThreadSize = blockDim.x / block_y_step / gridDim.y;
-
     int tx = threadIdx.x % blockDim.x;
     int ty = (blockIdx.y * blockDim.y) + threadIdx.y;
 
@@ -46,7 +43,7 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 {
     extern __shared__ int shared_data[];
 
-    int tx = threadIdx.x ;
+    int init_tx = threadIdx.x * CELLS_PER_THREADS;
             /* 0-511 */
             /*       0-127           */
 
@@ -61,8 +58,7 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 
     int ty = blockIdx.y * blockDim.y + (threadIdx.y);
 
-    int shared_tx = tx;
-
+    int init_shared_tx = init_tx;
     int shared_ty = ty % blockDim.y + 1;
 
     // load shared;
@@ -81,26 +77,24 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 
 5  11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
        */
-    shared_data[shared_tx + (shared_ty)*blockDim.x ] =  read_cell(source_domain, tx, ty, 0, 0, domain_x, domain_y, pitch);
-
-    if (shared_ty == 1) {
-        shared_data[shared_tx] = read_cell(source_domain, tx, ty, 0, -1, domain_x, domain_y, pitch);
+    for (int i=0 ; i<CELLS_PER_THREADS; i++ ) {
+        shared_data[init_shared_tx + i + (shared_ty)*blockDim.x*CELLS_PER_THREADS] = read_cell(source_domain, init_tx, ty, i, 0, domain_x, domain_y, pitch);
+        if (shared_ty == 1) {
+            shared_data[init_shared_tx + i + (shared_ty-1)*blockDim.x*CELLS_PER_THREADS] = read_cell(source_domain, init_tx, ty, i, -1, domain_x, domain_y, pitch);
+        }
+        if (shared_ty == 4) {
+            shared_data[init_shared_tx + i + (shared_ty+1)*blockDim.x*CELLS_PER_THREADS] = read_cell(source_domain, init_tx, ty, i, 1, domain_x, domain_y, pitch);
+        }
     }
-
-    if (shared_ty == 4) {
-        shared_data[shared_tx + (shared_ty+1)*blockDim.x ] = read_cell(source_domain, tx, ty, 0, 1, domain_x, domain_y, pitch);
-    }
-
-#if 0
+    __syncthreads();
     if ( (threadIdx.x == 0) && (threadIdx.y==0) && (blockIdx.y==0 )) {
         int i;
         for (i=0;i<768;i++) {
-            write_cell(dest_domain, i%blockDim.x, i/blockDim.x, 0,0,domain_x,domain_y,pitch,(shared_data[i]+1)%10);
+            write_cell(dest_domain, i%(blockDim.x*CELLS_PER_THREADS), i/(blockDim.x*CELLS_PER_THREADS), 0,0,domain_x,domain_y,pitch,(shared_data[i])%10);
         }
     }
     return;
-#endif
-
+#if 0
     __syncthreads();
     // Read cell
     int myself = shared_data[shared_tx + (shared_ty)*blockDim.x];
@@ -147,5 +141,6 @@ __global__ void life_kernel(int * source_domain, int * dest_domain, int domain_x
 
     write_cell(dest_domain, tx, ty, 0,0,domain_x,domain_y,pitch,new_value);
     return;
+#endif
 }
 

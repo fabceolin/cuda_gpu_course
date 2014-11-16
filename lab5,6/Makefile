@@ -4,7 +4,7 @@ OBJECTS := life.o utils.o
 CUDA_PATH ?=/usr/local/cuda
 NVCC=$(CUDA_PATH)/bin/nvcc
 
-CUDAFLAGS := -g -G -Xptxas=-v
+CUDAFLAGS := -g -G
 LDFLAGS := -g
 
 %.o: %.cu
