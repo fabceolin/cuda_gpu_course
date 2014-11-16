@@ -13,7 +13,7 @@ int main(int argc, char ** argv)
 
     int cells_per_word = 1;
 
-    int steps = 1;
+    int steps = 2;
 
     int blocks_y_step = 4;
     int blocks_y = domain_y / blocks_y_step;
