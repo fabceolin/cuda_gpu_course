@@ -8,24 +8,22 @@
 int main(int argc, char ** argv)
 {
     // Definition of parameters
-    int domain_x = 128;// Multiple of threads_per_block * cell_per_word
     int domain_y = 128;
+    int domain_x = 128 ;// Multiple of threads_per_block * cell_per_word
 
-    int cells_per_word = 1;
+    int cells_per_word = CELLS_PER_THREADS;
 
     int steps = 2;
 
     int blocks_y_step = 4;
     int blocks_y = domain_y / blocks_y_step;
     int blocks_x = 1;
-    
-    int threads_x = domain_x / CELLS_PER_THREADS;
-    int threads_x_init = domain_x;
+
+    int threads_x = domain_x / cells_per_word;
     int threads_y = blocks_y_step;
 
     dim3  grid(blocks_x  , blocks_y );// CUDA grid dimensions
     dim3  threads(threads_x, threads_y);// CUDA block dimensions
-    dim3  threads_init(threads_x_init, threads_y);// CUDA block dimensions
 
     // Allocation of arrays
     int * domain_gpu[2] = {NULL, NULL};
@@ -39,7 +37,7 @@ int main(int argc, char ** argv)
                 domain_y));
 
     // Arrays of dimensions pitch * domain.y
-    init_kernel<<< grid, threads_init, 0 >>>(domain_gpu[0], pitch,blocks_y_step);
+    init_kernel<<< grid, threads, 0 >>>(domain_gpu[0], domain_x, domain_y, pitch);
 
     // Timer initialization
     cudaEvent_t start, stop;
@@ -50,7 +48,7 @@ int main(int argc, char ** argv)
     CUDA_SAFE_CALL(cudaEventRecord(start, 0));
 
     // Kernel execution
-    int shared_mem_size = domain_x * (blocks_y_step+2) * sizeof(int) ;
+    int shared_mem_size = domain_x * (blocks_y_step+2) * sizeof(int) / CELLS_PER_THREADS;
     printf("%d %d %d \n",blocks_x, blocks_y, shared_mem_size);
     for(int i = 0; i < steps; i++) {
         life_kernel<<< grid, threads, shared_mem_size >>>(domain_gpu[i%2], domain_gpu[(i+1)%2], domain_x, domain_y, pitch);
@@ -80,15 +78,17 @@ int main(int argc, char ** argv)
     int blue = 0;
     for(int y = 0; y < domain_y; y++)
     {
-        for(int x = 0; x < domain_x; x++)
+        for(int x = 0; x < domain_x / cells_per_word; x++)
         {
-            int cell = domain_cpu[y * pitch/sizeof(int) + x];
-            printf("%u", cell);
-            if(cell == 1) {
-                red++;
-            }
-            else if(cell == 2) {
-                blue++;
+            for (int i=0; i < cells_per_word;i++) {
+                unsigned int cell = cellValueDecode(domain_cpu[y * pitch/sizeof(int) + x],i);
+                printf("%u", cell );
+                if(cell == 1) {
+                    red++;
+                }
+                else if(cell == 2) {
+                    blue++;
+                }
             }
         }
         printf("\n");
